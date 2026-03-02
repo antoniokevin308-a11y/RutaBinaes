@@ -12,4 +12,15 @@ button:hover { transform: translateY(-2px); filter: brightness(1.1); }
 .stop-card { border-left: 6px solid var(--primary); padding: 15px; margin-bottom: 15px; background: rgba(255,255,255,0.04); border-radius: 12px; }
 .student-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-top: 5px; font-size: 0.85rem; }
 .btn-small { width: auto; padding: 6px 10px; font-size: 0.65rem; margin-left: 4px; }
-#timer-box h1 { font-family: monospace; font-size: 4rem; margin: 0; text-align: center; color: #fff; text-shadow: 0 0 15px var(--secondary); }
+
+/* ARREGLO: Centrado total del contador */
+#timer-box { text-align: center; }
+#timer-box h1 { 
+    font-family: 'Courier New', monospace; 
+    font-size: 5rem; 
+    margin: 10px 0; 
+    color: #fff; 
+    text-shadow: 0 0 20px var(--secondary);
+    display: block;
+    width: 100%;
+}

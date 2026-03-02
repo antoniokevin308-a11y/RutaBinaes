@@ -14,17 +14,15 @@
         
         <div class="card" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
             <div>
-                <h3>📍 Gestión de Paradas</h3>
-                <input type="text" id="stop-name" placeholder="Nombre de la parada">
+                <h3>📍 Nueva Parada</h3>
+                <input type="text" id="stop-name" placeholder="Nombre (Ej: UGB San Miguel)">
                 <button onclick="addStop()" style="background:#f59e0b;">Guardar Pin Naranja</button>
-                <hr style="opacity:0.1; margin:15px 0;">
-                <button onclick="toggleGPS()" id="btn-gps" style="background:#4b5563;">📡 INICIAR TRANSMISIÓN GPS</button>
-                <p id="gps-status" style="font-size:0.6rem; color:#22c55e; margin-top:5px; text-align:center;"></p>
+                <button onclick="toggleGPS()" id="btn-gps" style="margin-top:10px;">📡 Iniciar GPS</button>
             </div>
             <div>
                 <h3>👤 Registrar Alumno</h3>
                 <input type="text" id="s-name" placeholder="Nombre completo">
-                <select id="s-stop-target"><option>Cargando...</option></select>
+                <select id="s-stop-target"><option>Cargando paradas...</option></select>
                 <button onclick="registerStudent()">Vincular Alumno</button>
             </div>
         </div>
@@ -35,7 +33,7 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="supabase-config.js"></script>
     <script>
-        let map, tempMarker, isGps = false, watchId = null;
+        let map, tempMarker, isGps = false, watchId;
 
         window.onload = () => {
             map = L.map('map').setView([13.4795, -88.1729], 14);
@@ -72,27 +70,6 @@
             });
         }
 
-        function toggleGPS() {
-            const btn = document.getElementById('btn-gps');
-            const status = document.getElementById('gps-status');
-            if (!isGps) {
-                isGps = true;
-                btn.innerText = "🔴 TRANSMITIENDO EN VIVO...";
-                btn.style.background = "#ef4444";
-                watchId = navigator.geolocation.watchPosition(async p => {
-                    const { latitude, longitude } = p.coords;
-                    status.innerText = `Posición: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-                    await window.db.from('bus_location').update({ lat: latitude, lng: longitude }).eq('id', 1);
-                }, null, { enableHighAccuracy: true });
-            } else {
-                isGps = false;
-                if(watchId) navigator.geolocation.clearWatch(watchId);
-                btn.innerText = "📡 INICIAR TRANSMISIÓN GPS";
-                btn.style.background = "#4b5563";
-                status.innerText = "";
-            }
-        }
-
         async function addStop() {
             const name = document.getElementById('stop-name').value;
             if(!tempMarker || !name) return alert("Nombre y clic en mapa");
@@ -123,6 +100,20 @@
         }
 
         async function delStudent(id) { await window.db.from('students').delete().eq('id', id); loadAdmin(); }
+
+        function toggleGPS() {
+            isGps = !isGps;
+            const btn = document.getElementById('btn-gps');
+            if(isGps) {
+                btn.innerText = "🔴 EN VIVO"; btn.style.background = "#ef4444";
+                watchId = navigator.geolocation.watchPosition(p => {
+                    window.db.from('bus_location').update({ lat: p.coords.latitude, lng: p.coords.longitude }).eq('id', 1).then();
+                }, null, {enableHighAccuracy:true});
+            } else {
+                navigator.geolocation.clearWatch(watchId);
+                btn.innerText = "📡 INICIAR GPS"; btn.style.background = "";
+            }
+        }
     </script>
 </body>
 </html>

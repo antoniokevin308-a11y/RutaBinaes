@@ -1,42 +1,15 @@
-:root {
-    --primary: #8b5cf6;
-    --secondary: #ec4899;
-    --bg: #050505;
-    --card: rgba(255, 255, 255, 0.08);
-    --border: rgba(255, 255, 255, 0.1);
-}
-
-body {
-    margin: 0; font-family: 'Inter', sans-serif;
-    background: radial-gradient(circle at top right, #1e1b4b, #050505);
-    color: #fff; min-height: 100vh;
-}
-
-.container { max-width: 900px; margin: 0 auto; padding: 15px; }
-
-.card {
-    background: var(--card); backdrop-filter: blur(12px);
-    border: 1px solid var(--border); border-radius: 16px;
-    padding: 20px; margin-bottom: 15px;
-}
-
-#map { height: 400px; border-radius: 16px; margin-bottom: 15px; border: 1px solid var(--border); }
-
-input, select {
-    background: rgba(0,0,0,0.5); border: 1px solid var(--border);
-    color: white; padding: 12px; border-radius: 8px; width: 100%; margin: 8px 0;
-}
-
-button {
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
-    color: white; border: none; padding: 14px; border-radius: 8px;
-    font-weight: 700; cursor: pointer; width: 100%; transition: 0.3s;
-}
-
+:root { --primary: #8b5cf6; --secondary: #ec4899; --bg: #050505; --card: rgba(255, 255, 255, 0.08); --border: rgba(255, 255, 255, 0.12); }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Segoe UI', sans-serif; background: radial-gradient(circle at top right, #1e1b4b, #050505); color: #fff; min-height: 100vh; }
+.container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+.card { background: var(--card); backdrop-filter: blur(15px); border: 1px solid var(--border); border-radius: 20px; padding: 20px; margin-bottom: 20px; }
+#map { height: 400px; border-radius: 20px; margin-bottom: 20px; border: 1px solid var(--border); z-index: 1; }
+input, select { background: rgba(0,0,0,0.5); border: 1px solid var(--border); color: white; padding: 12px; border-radius: 10px; width: 100%; margin: 8px 0; }
+button { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: 700; cursor: pointer; width: 100%; transition: 0.3s; text-transform: uppercase; }
 button:hover { transform: translateY(-2px); filter: brightness(1.1); }
-
-.stop-card { border-left: 6px solid var(--primary); padding: 15px; margin-bottom: 12px; background: rgba(255,255,255,0.03); border-radius: 12px; }
-.student-row { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.btn-small { width: auto; padding: 6px 12px; font-size: 0.75rem; margin-top: 0; }
-
-#timer-box h1 { font-family: 'Courier New', monospace; letter-spacing: 2px; }
+.admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 768px) { .admin-grid { grid-template-columns: 1fr; } }
+.stop-card { border-left: 6px solid var(--primary); padding: 15px; margin-bottom: 15px; background: rgba(255,255,255,0.04); border-radius: 12px; }
+.student-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-top: 5px; font-size: 0.85rem; }
+.btn-small { width: auto; padding: 6px 10px; font-size: 0.65rem; margin-left: 4px; }
+#timer-box h1 { font-family: monospace; font-size: 4rem; margin: 0; text-align: center; color: #fff; text-shadow: 0 0 15px var(--secondary); }

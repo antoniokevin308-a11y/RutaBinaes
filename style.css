@@ -39,4 +39,4 @@ button:hover { transform: translateY(-2px); filter: brightness(1.1); }
 .student-row { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
 .btn-small { width: auto; padding: 6px 12px; font-size: 0.75rem; margin-top: 0; }
 
-#timer-box h1 { font-family: 'Courier New', monospace; letter-spacing: 2px; font-weight: 900; }
+#timer-box h1 { font-family: 'Courier New', monospace; letter-spacing: 2px; }

@@ -16,8 +16,8 @@
             <span id="live-dot" style="color:#22c55e; font-size:0.7rem; display:none;">● LIVE</span>
         </div>
 
-        <div id="timer-box" class="card" style="display:none; text-align:center; border:3px solid #ec4899; box-shadow: 0 0 20px rgba(236, 72, 153, 0.3);">
-            <h1 id="count-ui" style="font-size:4.5rem; margin:0;">00:00</h1>
+        <div id="timer-box" class="card" style="display:none; text-align:center; border:3px solid #ec4899; box-shadow: 0 0 15px rgba(236, 72, 153, 0.3);">
+            <h1 id="count-ui" style="font-size:4.5rem; margin:0; font-weight:900;">00:00</h1>
             <p style="color:#ec4899; letter-spacing:3px; font-weight:bold;">BUS EN PARADA</p>
         </div>
 
@@ -30,7 +30,7 @@
         let map, busMarker, busPos = null, globalEndTime = null;
 
         const busIcon = L.divIcon({
-            html: `<div id="bus-node" style="font-size:30px; background:white; border-radius:50%; padding:5px; border:3px solid #8b5cf6; opacity:0; transition: all 1s linear;">🚍</div>`,
+            html: `<div id="bus-node" style="font-size:30px; background:white; border-radius:50%; padding:5px; border:3px solid #8b5cf6; opacity:0; transition: all 1s linear; box-shadow:0 0 20px #8b5cf6;">🚍</div>`,
             className: 'custom-bus'
         });
 
@@ -39,9 +39,9 @@
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
             busMarker = L.marker([0,0], {icon: busIcon}).addTo(map);
 
-            loadData();
+            loadData(); // Carga inicial
 
-            // REALTIME BUS
+            // GPS Tiempo Real (Sin parpadeos)
             window.db.channel('bus-live').on('postgres_changes', {event:'UPDATE', table:'bus_location'}, p => {
                 if(p.new.lat) {
                     busPos = [p.new.lat, p.new.lng];
@@ -52,10 +52,10 @@
                 }
             }).subscribe();
 
-            // ACTUALIZACIÓN DE DATOS CADA 5 SEGUNDOS
+            // Sincronización de lista cada 5 segundos
             setInterval(loadData, 5000);
 
-            // MOTOR DEL RELOJ (CADA 1 SEGUNDO)
+            // MOTOR DEL RELOJ: Corre cada 1 segundo por separado
             setInterval(runClockEngine, 1000);
         };
 
@@ -63,12 +63,12 @@
             const { data: stops } = await window.db.from('stops').select('*, students(*)').order('id');
             const root = document.getElementById('itinerary');
             let content = "";
-            let timerFound = false;
+            let timerActive = false;
 
             stops?.forEach((s, idx) => {
                 const active = s.status === 'active';
                 const done = s.status === 'completed';
-                if(active && s.end_time) { globalEndTime = s.end_time; timerFound = true; }
+                if(active && s.end_time) { globalEndTime = s.end_time; timerActive = true; }
 
                 const studs = s.students.map(st => `<div class="student-row">${st.name}</div>`).join('');
                 content += `
@@ -78,7 +78,7 @@
                     </div>`;
             });
             root.innerHTML = content;
-            if(!timerFound) { globalEndTime = null; document.getElementById('timer-box').style.display = 'none'; }
+            if(!timerActive) { globalEndTime = null; document.getElementById('timer-box').style.display = 'none'; }
         }
 
         function runClockEngine() {

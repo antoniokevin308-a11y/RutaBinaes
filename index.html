@@ -23,43 +23,35 @@
     <script src="supabase-config.js"></script>
     <script>
         let map, busMarker, stopMarkers = [], busPos = null;
-        // Icono de bus pequeño y sin fondo blanco
         const busIcon = L.divIcon({ html: '🚍', className: 'bus-icon-style', iconSize: [35, 35], iconAnchor: [17, 17] });
 
         window.onload = async function() {
             map = L.map('map').setView([13.4795, -88.1729], 16);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
             
-            // 1. CARGA INICIAL
+            // CARGA INICIAL Y REALTIME
             const { data } = await window.db.from('bus_location').select('*').eq('id', 1).single();
             if(data) updateBusUI(data);
 
-            // 2. CONEXIÓN REALTIME ULTRA RÁPIDA
-            window.db.channel('realtime-bus')
-            .on('postgres_changes', { event: 'UPDATE', table: 'bus_location' }, payload => {
-                updateBusUI(payload.new);
-            })
-            .subscribe();
+            window.db.channel('bus-live').on('postgres_changes', {event:'UPDATE', table:'bus_location'}, p => updateBusUI(p.new)).subscribe();
 
             loadData();
-            setInterval(loadData, 5000); // Actualiza lista de alumnos
-            setInterval(runClock, 1000); // Segundero
+            setInterval(loadData, 5000);
+            setInterval(runClock, 1000);
         };
 
         function updateBusUI(data) {
             const statusLabel = document.getElementById('bus-status');
             const trackBtn = document.getElementById('re-track');
-
             if(data.lat && data.lng) {
                 busPos = [data.lat, data.lng];
                 statusLabel.innerText = "● EN VIVO"; statusLabel.style.color = "#22c55e";
                 trackBtn.style.display = "block";
-
                 if(!busMarker) {
                     busMarker = L.marker(busPos, {icon: busIcon}).addTo(map);
                     map.flyTo(busPos, 17);
                 } else {
-                    busMarker.setLatLng(busPos); // El icono se mueve sin saltos bruscos
+                    busMarker.setLatLng(busPos);
                 }
             } else {
                 if(busMarker) map.removeLayer(busMarker);
@@ -80,14 +72,14 @@
                 const done = s.status === 'completed';
                 if(active && s.end_time) { window.endTime = s.end_time; anyActive = true; }
                 
-                stopMarkers.push(L.circleMarker([s.lat, s.lng], {
-                    color: active ? '#ef4444' : (done ? '#4b5563' : '#8b5cf6'),
-                    radius: 8, fillOpacity: 0.8
-                }).addTo(map));
-
+                stopMarkers.push(L.circleMarker([s.lat, s.lng], {color: active?'#ef4444':(done?'#4b5563':'#8b5cf6'), radius:8, fillOpacity:0.8}).addTo(map));
                 const studs = s.students.map(st => `<div class="student-row">${st.name}</div>`).join('');
-                content += `<div class="card" style="border-left:8px solid ${active?'#ef4444':(done?'#4b5563':'#8b5cf6')}; opacity:${done?0.6:1}">
-                    <h3>📍 RUTA ${idx+1}: ${s.name}</h3>${studs || '<small>Sin alumnos</small>'}</div>`;
+                
+                content += `
+                <div class="card" style="border-left:8px solid ${active?'#ef4444':(done?'#4b5563':'#8b5cf6')}; opacity:${done?0.6:1}">
+                    <h3>📍 RUTA ${idx+1}: ${s.name} ${active ? '<small>(ACTUAL)</small>' : ''}</h3>
+                    ${studs || '<small>Sin alumnos</small>'}
+                </div>`;
             });
             if(!anyActive) window.endTime = null;
             root.innerHTML = content;

@@ -78,43 +78,33 @@
                     const pos = [p.coords.latitude, p.coords.longitude];
                     if(!busMarkerAdmin) busMarkerAdmin = L.marker(pos, {icon: busIcon}).addTo(map);
                     else busMarkerAdmin.setLatLng(pos);
-                    map.panTo(pos);
                     await window.db.from('bus_location').update({ lat: pos[0], lng: pos[1] }).eq('id', 1);
-                }, (err) => alert("Error GPS: " + err.message), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+                }, (err) => console.error(err), { enableHighAccuracy: true, maximumAge: 0 });
             } else {
                 isGps = false; navigator.geolocation.clearWatch(watchId);
                 if(busMarkerAdmin) map.removeLayer(busMarkerAdmin); busMarkerAdmin = null;
                 btn.innerText = "📡 TRANSMITIR GPS EN VIVO"; btn.style.background = "#4b5563";
-                window.db.from('bus_location').update({ lat: null, lng: null }).eq('id', 1).then();
+                window.db.from('bus_location').update({ lat: null, lng: null }).eq('id', 1);
             }
         }
 
         async function registerStudent() {
-            const name = document.getElementById('s-name').value;
-            const stopId = document.getElementById('s-stop-target').value;
-            if(!name || !stopId) return alert("Faltan datos");
-            await window.db.from('students').insert([{ name, stop_id: stopId, code: "N/A", major: "Estudiante" }]);
+            await window.db.from('students').insert([{ name: document.getElementById('s-name').value, stop_id: document.getElementById('s-stop-target').value, code: "N/A", major: "Estudiante" }]);
             document.getElementById('s-name').value = ""; loadAdmin();
         }
-
         async function addStop() {
-            const name = document.getElementById('stop-name').value;
-            if(!tempMarker || !name) return alert("Clic mapa + nombre");
-            await window.db.from('stops').insert([{ name, lat: tempMarker.getLatLng().lat, lng: tempMarker.getLatLng().lng }]);
+            await window.db.from('stops').insert([{ name: document.getElementById('stop-name').value, lat: tempMarker.getLatLng().lat, lng: tempMarker.getLatLng().lng }]);
             location.reload();
         }
-
         async function setTimer(id) {
             const end = new Date(Date.now() + 10 * 60000).toISOString();
             await window.db.from('stops').update({ status: 'active', end_time: end }).eq('id', id);
             loadAdmin();
         }
-
         async function updateStatus(id, status) {
             await window.db.from('stops').update({ status, end_time: null }).eq('id', id);
             loadAdmin();
         }
-
         async function deleteStop(id) { if(confirm("¿Borrar?")) { await window.db.from('stops').delete().eq('id', id); location.reload(); } }
         async function delStudent(id) { await window.db.from('students').delete().eq('id', id); loadAdmin(); }
     </script>

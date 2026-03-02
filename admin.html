@@ -2,38 +2,35 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - RutaBinaria UGB</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <title>Admin - RutaBinaria</title>
+    <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div class="container">
-        <header class="card"><h1>Admin RutaBinaria 🚍</h1></header>
+        <header class="card"><h1>Admin Maestro 🚍</h1></header>
         <div id="map"></div>
-        
-        <div class="card" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-            <div>
-                <h3>📍 Nueva Parada</h3>
-                <input type="text" id="stop-name" placeholder="Nombre (Ej: UGB San Miguel)">
+        <div class="admin-grid">
+            <div class="card">
+                <h3>📍 Gestión de Paradas</h3>
+                <input type="text" id="stop-name" placeholder="Nombre de parada">
                 <button onclick="addStop()" style="background:#f59e0b;">Guardar Pin Naranja</button>
-                <button onclick="toggleGPS()" id="btn-gps" style="margin-top:10px;">📡 Iniciar GPS</button>
+                <button onclick="toggleGPS()" id="btn-gps" style="margin-top:10px; background:#4b5563;">📡 TRANSMITIR GPS EN VIVO</button>
             </div>
-            <div>
-                <h3>👤 Registrar Alumno</h3>
+            <div class="card">
+                <h3>👤 Registrar Estudiante</h3>
                 <input type="text" id="s-name" placeholder="Nombre completo">
-                <select id="s-stop-target"><option>Cargando paradas...</option></select>
+                <select id="s-stop-target"><option value="">Cargando paradas...</option></select>
                 <button onclick="registerStudent()">Vincular Alumno</button>
             </div>
         </div>
-
-        <div class="card"><h3>📋 Gestión de Ruta y Alumnos</h3><div id="stops-container"></div></div>
+        <div id="stops-container"></div>
     </div>
-
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="supabase-config.js"></script>
     <script>
-        let map, tempMarker, isGps = false, watchId;
+        let map, tempMarker, isGps = false, watchId = null, markers = [], busMarkerAdmin;
+        const busIcon = L.divIcon({ html: `<div style="font-size:25px; filter: drop-shadow(0 0 5px #fff);">🚍</div>`, className: 'bus-admin' });
 
         window.onload = () => {
             map = L.map('map').setView([13.4795, -88.1729], 14);
@@ -49,30 +46,60 @@
             const { data: stops } = await window.db.from('stops').select('*, students(*)').order('id');
             const container = document.getElementById('stops-container');
             const select = document.getElementById('s-stop-target');
-            container.innerHTML = ""; select.innerHTML = "";
+            markers.forEach(m => map.removeLayer(m)); markers = [];
+            container.innerHTML = ""; select.innerHTML = '<option value="">Seleccione parada...</option>';
+            
             stops?.forEach(s => {
                 select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+                markers.push(L.marker([s.lat, s.lng]).addTo(map).bindPopup(s.name));
                 const studentsHtml = s.students.map(st => `
                     <div class="student-row"><span>${st.name}</span><button class="btn-small" style="background:#ef4444" onclick="delStudent(${st.id})">x</button></div>
                 `).join('');
                 container.innerHTML += `
                     <div class="stop-card">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <strong>${s.name} [${s.status}]</strong>
+                            <strong>${s.name} <small>(${s.status})</small></strong>
                             <div>
-                                <button class="btn-small" style="background:#22c55e" onclick="setTimer(${s.id})">10m</button>
-                                <button class="btn-small" style="background:#4b5563" onclick="updateStatus(${s.id},'completed')">Fin</button>
+                                <button class="btn-small" style="background:#22c55e" onclick="setTimer(${s.id})">Timer</button>
+                                <button class="btn-small" style="background:#6366f1" onclick="updateStatus(${s.id},'completed')">Fin</button>
                                 <button class="btn-small" style="background:#b91c1c" onclick="deleteStop(${s.id})">Del</button>
                             </div>
                         </div>
-                        <div style="margin-top:8px;">${studentsHtml}</div>
+                        <div style="margin-top:10px;">${studentsHtml || '<small>Sin alumnos</small>'}</div>
                     </div>`;
             });
         }
 
+        function toggleGPS() {
+            const btn = document.getElementById('btn-gps');
+            if (!isGps) {
+                isGps = true; btn.innerText = "🔴 COMPARTIENDO..."; btn.style.background = "#ef4444";
+                watchId = navigator.geolocation.watchPosition(async p => {
+                    const pos = [p.coords.latitude, p.coords.longitude];
+                    if(!busMarkerAdmin) busMarkerAdmin = L.marker(pos, {icon: busIcon}).addTo(map);
+                    else busMarkerAdmin.setLatLng(pos);
+                    map.panTo(pos);
+                    await window.db.from('bus_location').update({ lat: pos[0], lng: pos[1] }).eq('id', 1);
+                }, (err) => alert("Error GPS: " + err.message), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+            } else {
+                isGps = false; navigator.geolocation.clearWatch(watchId);
+                if(busMarkerAdmin) map.removeLayer(busMarkerAdmin); busMarkerAdmin = null;
+                btn.innerText = "📡 TRANSMITIR GPS EN VIVO"; btn.style.background = "#4b5563";
+                window.db.from('bus_location').update({ lat: null, lng: null }).eq('id', 1).then();
+            }
+        }
+
+        async function registerStudent() {
+            const name = document.getElementById('s-name').value;
+            const stopId = document.getElementById('s-stop-target').value;
+            if(!name || !stopId) return alert("Faltan datos");
+            await window.db.from('students').insert([{ name, stop_id: stopId, code: "N/A", major: "Estudiante" }]);
+            document.getElementById('s-name').value = ""; loadAdmin();
+        }
+
         async function addStop() {
             const name = document.getElementById('stop-name').value;
-            if(!tempMarker || !name) return alert("Nombre y clic en mapa");
+            if(!tempMarker || !name) return alert("Clic mapa + nombre");
             await window.db.from('stops').insert([{ name, lat: tempMarker.getLatLng().lat, lng: tempMarker.getLatLng().lng }]);
             location.reload();
         }
@@ -88,32 +115,8 @@
             loadAdmin();
         }
 
-        async function deleteStop(id) {
-            if(confirm("¿Borrar parada?")) { await window.db.from('stops').delete().eq('id', id); location.reload(); }
-        }
-
-        async function registerStudent() {
-            const name = document.getElementById('s-name').value;
-            const stopId = document.getElementById('s-stop-target').value;
-            await window.db.from('students').insert([{ name, stop_id: stopId, major: 'UGB', code: '2026' }]);
-            loadAdmin();
-        }
-
+        async function deleteStop(id) { if(confirm("¿Borrar?")) { await window.db.from('stops').delete().eq('id', id); location.reload(); } }
         async function delStudent(id) { await window.db.from('students').delete().eq('id', id); loadAdmin(); }
-
-        function toggleGPS() {
-            isGps = !isGps;
-            const btn = document.getElementById('btn-gps');
-            if(isGps) {
-                btn.innerText = "🔴 EN VIVO"; btn.style.background = "#ef4444";
-                watchId = navigator.geolocation.watchPosition(p => {
-                    window.db.from('bus_location').update({ lat: p.coords.latitude, lng: p.coords.longitude }).eq('id', 1).then();
-                }, null, {enableHighAccuracy:true});
-            } else {
-                navigator.geolocation.clearWatch(watchId);
-                btn.innerText = "📡 INICIAR GPS"; btn.style.background = "";
-            }
-        }
     </script>
 </body>
 </html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usuario - RutaBinaria</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <div id="map" style="height: 450px;"></div>
+        
+        <div class="card" style="display:flex; gap:10px;">
+            <button onclick="centerOnBus()" id="track-btn" style="background:#3b82f6; display:none;">📍 Rastrear ubicación del Bus</button>
+            <button onclick="location.reload()" style="background:#4b5563; width:auto;">🔄</button>
+        </div>
+
+        <div id="timer-box" class="card" style="display:none; text-align:center; border:3px solid #ec4899; animation: pulse 2s infinite;">
+            <h1 id="count-ui" style="font-size:4rem; margin:0;">00:00</h1>
+            <p style="color:#ec4899; font-weight:bold;">🚍 BUS EN PARADA ACTUAL</p>
+        </div>
+
+        <div id="itinerary"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="supabase-config.js"></script>
+    <script>
+        let map, busMarker, busPos = null;
+        const busIcon = L.divIcon({
+            html: `<div id="bus-ico" style="font-size:26px; background:white; border-radius:50%; padding:5px; border:3px solid #8b5cf6; opacity:0; transition:0.5s; box-shadow:0 0 15px #8b5cf6;">🚍</div>`,
+            className: 'custom-icon'
+        });
+
+        window.onload = async function() {
+            map = L.map('map').setView([13.4795, -88.1729], 15);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            busMarker = L.marker([0,0], {icon: busIcon}).addTo(map);
+
+            loadPublicView();
+
+            // Realtime Bus: Solo aparece cuando hay coordenadas
+            window.db.channel('bus').on('postgres_changes', {event:'UPDATE', table:'bus_location'}, p => {
+                if(p.new.lat) {
+                    busPos = [p.new.lat, p.new.lng];
+                    busMarker.setLatLng(busPos);
+                    document.getElementById('bus-ico').style.opacity = "1";
+                    document.getElementById('track-btn').style.display = "block";
+                }
+            }).subscribe();
+
+            // Realtime General
+            window.db.channel('changes').on('postgres_changes', {event:'*', schema:'public'}, () => location.reload()).subscribe();
+        };
+
+        async function loadPublicView() {
+            const { data: stops } = await window.db.from('stops').select('*, students(*)').order('id');
+            const root = document.getElementById('itinerary');
+            root.innerHTML = "";
+
+            stops?.forEach((s, idx) => {
+                const isActive = s.status === 'active';
+                const isDone = s.status === 'completed';
+                
+                L.circleMarker([s.lat, s.lng], {
+                    color: isActive ? '#ef4444' : (isDone ? 'gray' : '#8b5cf6'),
+                    radius: 12, fillOpacity: 0.8
+                }).addTo(map).bindPopup(`Ruta ${idx+1}: ${s.name}`);
+
+                const students = s.students.map(st => `<div class="student-row"><span>${st.name}</span> <small>${st.major}</small></div>`).join('');
+
+                root.innerHTML += `
+                    <div class="card" style="border-left: 8px solid ${isActive?'#ef4444':(isDone?'gray':'#8b5cf6')}; opacity: ${isDone?0.6:1}">
+                        <h3>📍 RUTA ${idx+1}: ${s.name}</h3>
+                        <div>${students || '<small>Sin integrantes</small>'}</div>
+                    </div>
+                `;
+
+                if(isActive && s.end_time) startPersistentTimer(s.end_time);
+            });
+        }
+
+        function startPersistentTimer(endTime) {
+            const box = document.getElementById('timer-box');
+            box.style.display = 'block';
+            const counter = document.getElementById('count-ui');
+
+            const interval = setInterval(() => {
+                const diff = Math.floor((new Date(endTime) - new Date()) / 1000);
+                if(diff <= 0) {
+                    clearInterval(interval);
+                    box.style.display = 'none';
+                } else {
+                    counter.innerText = `${Math.floor(diff/60)}:${(diff%60).toString().padStart(2,'0')}`;
+                }
+            }, 1000);
+        }
+
+        function centerOnBus() {
+            if(busPos) map.flyTo(busPos, 17);
+        }
+    </script>
+    <style>
+        @keyframes pulse { 0% { opacity:1; } 50% { opacity:0.7; } 100% { opacity:1; } }
+    </style>
+</body>
+</html>

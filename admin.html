@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - RutaBinaria</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="card"><h1>Admin RutaBinaria 🚍</h1></header>
+        <div id="map"></div>
+        
+        <div class="grid">
+            <div class="card">
+                <h3>📍 Nueva Parada</h3>
+                <input type="text" id="stop-name" placeholder="Nombre de la parada">
+                <p id="hint" style="font-size:0.7rem; color:#f59e0b;">Haz clic en el mapa para ver el pin naranja</p>
+                <button onclick="addStop()" style="background:#f59e0b;">Guardar Parada Seleccionada</button>
+                <hr style="opacity:0.1; margin:15px 0;">
+                <button onclick="toggleGPS()" id="btn-gps">📡 Iniciar Transmisión GPS</button>
+            </div>
+
+            <div class="card">
+                <h3>👤 Registrar Alumno</h3>
+                <input type="text" id="s-name" placeholder="Nombre completo">
+                <select id="s-stop-target"><option>Cargando paradas...</option></select>
+                <select id="s-major">
+                    <option value="Ingeniería">Ingeniería</option>
+                    <option value="Técnico">Técnico</option>
+                    <option value="Inteligencia">Inteligencia</option>
+                </select>
+                <button onclick="registerStudent()">Vincular Estudiante</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>📋 Itinerario y Gestión de Alumnos</h3>
+            <div id="stops-container"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="supabase-config.js"></script>
+    <script>
+        let map, tempMarker, isGps = false;
+
+        window.onload = () => {
+            map = L.map('map').setView([13.4795, -88.1729], 14);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+            map.on('click', e => {
+                if(tempMarker) map.removeLayer(tempMarker);
+                tempMarker = L.circleMarker(e.latlng, {color: '#f59e0b', radius: 12, fillOpacity: 0.9}).addTo(map);
+                tempMarker.bindPopup("Confirmar esta ubicación").openPopup();
+            });
+            loadAdminPanel();
+        };
+
+        async function loadAdminPanel() {
+            const { data: stops } = await window.db.from('stops').select('*, students(*)').order('id');
+            const container = document.getElementById('stops-container');
+            const select = document.getElementById('s-stop-target');
+            container.innerHTML = ""; select.innerHTML = "";
+
+            stops?.forEach(s => {
+                select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+                L.marker([s.lat, s.lng]).addTo(map).bindPopup(s.name);
+
+                const studentsHtml = s.students.map(st => `
+                    <div class="student-row">
+                        <span>${st.name} (${st.major})</span>
+                        <button class="btn-small" style="background:#ef4444" onclick="deleteStudent(${st.id})">Quitar</button>
+                    </div>
+                `).join('');
+
+                container.innerHTML += `
+                    <div class="stop-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <strong>${s.name} <span style="font-size:0.7rem; opacity:0.6;">[${s.status.toUpperCase()}]</span></strong>
+                            <div>
+                                <button class="btn-small" style="background:#22c55e" onclick="startTimer(${s.id})">Timer 10m</button>
+                                <button class="btn-small" style="background:#4b5563" onclick="updateStopStatus(${s.id}, 'completed')">Fin</button>
+                                <button class="btn-small" style="background:#b91c1c" onclick="deleteStop(${s.id})">Borrar</button>
+                            </div>
+                        </div>
+                        <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.05);">${studentsHtml || '<small style="opacity:0.4;">Sin estudiantes</small>'}</div>
+                    </div>
+                `;
+            });
+        }
+
+        async function addStop() {
+            const name = document.getElementById('stop-name').value;
+            if(!name || !tempMarker) return alert("Pon un nombre y haz clic en el mapa");
+            const pos = tempMarker.getLatLng();
+            await window.db.from('stops').insert([{ name, lat: pos.lat, lng: pos.lng }]);
+            location.reload();
+        }
+
+        async function startTimer(id) {
+            const endTime = new Date(Date.now() + 10 * 60000).toISOString();
+            await window.db.from('stops').update({ status: 'active', end_time: endTime }).eq('id', id);
+            location.reload();
+        }
+
+        async function updateStopStatus(id, status) {
+            await window.db.from('stops').update({ status, end_time: null }).eq('id', id);
+            location.reload();
+        }
+
+        async function deleteStop(id) {
+            if(confirm("¿Eliminar esta parada y sus integrantes?")) {
+                await window.db.from('stops').delete().eq('id', id);
+                location.reload();
+            }
+        }
+
+        async function registerStudent() {
+            const name = document.getElementById('s-name').value;
+            const stopId = document.getElementById('s-stop-target').value;
+            const major = document.getElementById('s-major').value;
+            if(!name) return alert("Escribe el nombre del alumno");
+            await window.db.from('students').insert([{ name, stop_id: stopId, major, code: '2026' }]);
+            loadAdminPanel();
+        }
+
+        async function deleteStudent(id) {
+            await window.db.from('students').delete().eq('id', id);
+            loadAdminPanel();
+        }
+
+        function toggleGPS() {
+            isGps = !isGps;
+            document.getElementById('btn-gps').innerText = isGps ? "🔴 Transmitiendo GPS..." : "📡 Iniciar Transmisión GPS";
+            document.getElementById('btn-gps').style.background = isGps ? "#ef4444" : "";
+            if(isGps) {
+                navigator.geolocation.watchPosition(p => {
+                    window.db.from('bus_location').update({ 
+                        lat: p.coords.latitude, lng: p.coords.longitude, updated_at: new Date().toISOString()
+                    }).eq('id', 1).then();
+                }, null, {enableHighAccuracy:true});
+            }
+        }
+    </script>
+</body>
+</html>

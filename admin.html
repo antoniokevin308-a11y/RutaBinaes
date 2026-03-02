@@ -20,9 +20,7 @@
             <div class="card">
                 <h3>👤 Registrar Estudiante</h3>
                 <input type="text" id="s-name" placeholder="Nombre completo">
-                <select id="s-stop-target">
-                    <option value="">Cargando paradas...</option>
-                </select>
+                <select id="s-stop-target"><option value="">Cargando paradas...</option></select>
                 <button onclick="registerStudent()">Vincular Alumno</button>
             </div>
         </div>
@@ -48,67 +46,40 @@
             const { data: stops } = await window.db.from('stops').select('*, students(*)').order('id');
             const container = document.getElementById('stops-container');
             const select = document.getElementById('s-stop-target');
-            
             markers.forEach(m => map.removeLayer(m)); markers = [];
-            container.innerHTML = ""; 
-            select.innerHTML = '<option value="">Seleccione una parada...</option>';
+            container.innerHTML = ""; select.innerHTML = '<option value="">Seleccione parada...</option>';
             
             stops?.forEach(s => {
-                // Llenar el select de estudiantes
                 select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-                
-                // Marcadores en el mapa
                 markers.push(L.marker([s.lat, s.lng]).addTo(map).bindPopup(s.name));
                 
-                // Lista de alumnos debajo
-                const studentsHtml = s.students.map(st => `
-                    <div class="student-row">
-                        <span>${st.name}</span>
-                        <button class="btn-small" style="background:#ef4444" onclick="delStudent(${st.id})">x</button>
-                    </div>
-                `).join('');
+                const isActive = s.status === 'active';
+                const isDone = s.status === 'completed';
+                const statusLabel = isActive ? '<span class="status-tag status-active">En Proceso</span>' : (isDone ? '<span class="status-tag status-completed">Finalizada</span>' : '');
 
+                const studentsHtml = s.students.map(st => `<div class="student-row"><span>${st.name}</span><button class="btn-small" style="background:#ef4444" onclick="delStudent(${st.id})">x</button></div>`).join('');
+                
                 container.innerHTML += `
-                    <div class="stop-card">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <strong>${s.name}</strong>
-                            <div>
-                                <button class="btn-small" style="background:#22c55e" onclick="setTimer(${s.id})">Timer</button>
-                                <button class="btn-small" style="background:#6366f1" onclick="updateStatus(${s.id},'completed')">Fin</button>
-                                <button class="btn-small" style="background:#b91c1c" onclick="deleteStop(${s.id})">Del</button>
-                            </div>
+                <div class="stop-card" style="border-left-color: ${isActive ? '#ef4444' : (isDone ? '#4b5563' : '#8b5cf6')}; opacity: ${isDone ? 0.7 : 1}">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong>${s.name} ${statusLabel}</strong>
+                        <div>
+                            <button class="btn-small" style="background:#22c55e" onclick="setTimer(${s.id})">Timer</button>
+                            <button class="btn-small" style="background:#6366f1" onclick="updateStatus(${s.id},'completed')">Fin</button>
+                            <button class="btn-small" style="background:#b91c1c" onclick="deleteStop(${s.id})">Del</button>
                         </div>
-                        <div>${studentsHtml || '<small style="color:#9ca3af;">Sin alumnos registrados</small>'}</div>
-                    </div>`;
+                    </div>
+                    <div style="margin-top:10px;">${studentsHtml || '<small>Sin alumnos</small>'}</div>
+                </div>`;
             });
         }
 
         async function registerStudent() {
             const name = document.getElementById('s-name').value;
             const stopId = document.getElementById('s-stop-target').value;
-
-            if(!name || !stopId) {
-                alert("Por favor escribe el nombre y selecciona una parada.");
-                return;
-            }
-
-            // CORRECCIÓN: Insertamos el nombre y el ID de la parada seleccionada
-            const { error } = await window.db.from('students').insert([
-                { 
-                    name: name, 
-                    stop_id: parseInt(stopId), // Aseguramos que sea un número
-                    code: "N/A", 
-                    major: "Estudiante" 
-                }
-            ]);
-
-            if(error) {
-                console.error("Error al registrar:", error);
-                alert("Error al guardar estudiante");
-            } else {
-                document.getElementById('s-name').value = "";
-                loadAdmin(); // Recarga la lista para ver al nuevo alumno
-            }
+            if(!name || !stopId) return alert("Completa los datos");
+            await window.db.from('students').insert([{ name, stop_id: parseInt(stopId), code: "N/A", major: "Estudiante" }]);
+            document.getElementById('s-name').value = ""; loadAdmin();
         }
 
         function toggleGPS() {
@@ -120,7 +91,7 @@
                     if(!busMarkerAdmin) busMarkerAdmin = L.marker(pos, {icon: busIcon}).addTo(map);
                     else busMarkerAdmin.setLatLng(pos);
                     await window.db.from('bus_location').update({ lat: pos[0], lng: pos[1] }).eq('id', 1);
-                }, (err) => console.error(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+                }, null, { enableHighAccuracy: true, maximumAge: 0 });
             } else {
                 isGps = false; navigator.geolocation.clearWatch(watchId);
                 if(busMarkerAdmin) map.removeLayer(busMarkerAdmin); busMarkerAdmin = null;
@@ -128,29 +99,20 @@
                 window.db.from('bus_location').update({ lat: null, lng: null }).eq('id', 1);
             }
         }
-
         async function addStop() {
-            if(!tempMarker) { alert("Haz clic en el mapa para ubicar la parada"); return; }
-            await window.db.from('stops').insert([{ 
-                name: document.getElementById('stop-name').value || "Nueva Parada", 
-                lat: tempMarker.getLatLng().lat, 
-                lng: tempMarker.getLatLng().lng 
-            }]);
+            await window.db.from('stops').insert([{ name: document.getElementById('stop-name').value, lat: tempMarker.getLatLng().lat, lng: tempMarker.getLatLng().lng }]);
             location.reload();
         }
-
         async function setTimer(id) {
             const end = new Date(Date.now() + 10 * 60000).toISOString();
             await window.db.from('stops').update({ status: 'active', end_time: end }).eq('id', id);
             loadAdmin();
         }
-
         async function updateStatus(id, status) {
             await window.db.from('stops').update({ status, end_time: null }).eq('id', id);
             loadAdmin();
         }
-
-        async function deleteStop(id) { if(confirm("¿Borrar parada?")) { await window.db.from('stops').delete().eq('id', id); loadAdmin(); } }
+        async function deleteStop(id) { if(confirm("¿Borrar?")) { await window.db.from('stops').delete().eq('id', id); loadAdmin(); } }
         async function delStudent(id) { await window.db.from('students').delete().eq('id', id); loadAdmin(); }
     </script>
 </body>

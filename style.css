@@ -8,13 +8,18 @@ input, select { background: rgba(0,0,0,0.5); border: 1px solid var(--border); co
 button { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: 700; cursor: pointer; width: 100%; transition: 0.2s; }
 .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 768px) { .admin-grid { grid-template-columns: 1fr; } }
-.stop-card { border-left: 6px solid var(--primary); padding: 15px; margin-bottom: 15px; background: rgba(255,255,255,0.04); border-radius: 12px; }
+.stop-card { border-left: 6px solid var(--primary); padding: 15px; margin-bottom: 15px; background: rgba(255,255,255,0.04); border-radius: 12px; transition: 0.3s; }
 .student-row { display: flex; justify-content: space-between; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-top: 5px; font-size: 0.85rem; }
 .btn-small { width: auto; padding: 6px 10px; font-size: 0.65rem; margin-left: 4px; }
 
-/* Icono del Bus - Mejorado */
-.bus-icon-style { font-size: 24px; line-height: 1; text-align: center; filter: drop-shadow(0 0 5px rgba(0,0,0,0.5)); }
+/* Estilos de Estado */
+.status-tag { font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-left: 10px; vertical-align: middle; }
+.status-active { background: #ef4444; color: white; }
+.status-completed { background: #4b5563; color: white; }
+
+/* Icono del Bus (Sin fondo blanco) */
+.bus-icon-style { font-size: 30px; line-height: 1; text-align: center; filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.8)); }
 
 /* Contador Gigante Centrado */
 #timer-box { text-align: center; }
-#timer-box h1 { font-family: 'Courier New', monospace; font-size: 5rem; margin: 10px 0; color: #fff; text-shadow: 0 0 20px var(--secondary); }
+#timer-box h1 { font-family: 'Courier New', monospace; font-size: 5rem; margin: 10px 0; color: #fff; text-shadow: 0 0 20px var(--secondary); display: block; width: 100%; }

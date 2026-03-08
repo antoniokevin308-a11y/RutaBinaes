@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transporte 2 - RutaBinaes</title>
+    <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <button onclick="location.href='index.html'" style="width: auto; padding: 8px 15px; background: #4b5563;">⬅ Volver</button>
+            <h2 style="margin: 0;">🚌 TRANSPORTE 2</h2>
+        </header>
+        <div id="map"></div>
+        <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+            <div id="bus-status" style="font-weight:bold; color:#9ca3af;">Bus: Desconectado</div>
+            <button onclick="centerBus()" id="re-track" style="width:auto; padding:8px 15px; display:none; background:#3b82f6; font-size:0.7rem;">Re-centrar Bus</button>
+        </div>
+        <div id="timer-box" class="card" style="display:none; border:3px solid #ec4899;">
+            <h1 id="count-ui">00:00</h1>
+            <p style="text-align:center; color:#ec4899; font-weight:bold; margin:0;">TIEMPO EN PARADA</p>
+        </div>
+        <div id="alert-container"></div>
+        <div id="itinerary"></div>
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="supabase-config.js"></script>
+    <script>
+        const BUS_ID = 2;
+        let map, busMarker, stopMarkers = [], busPos = null, hasCentered = false;
+        const busIcon = L.divIcon({
+            html: `<div style="font-size:35px; background:white; border-radius:50%; padding:5px; border:4px solid #f59e0b; box-shadow:0 0 15px rgba(245, 158, 11, 0.5);">🚍</div>`,
+            className: 'custom-bus'
+        });
+
+        window.onload = async function() {
+            map = L.map('map').setView([13.4795, -88.1729], 15);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            
+            window.db.channel('bus-live-2').on('postgres_changes', {event:'UPDATE', table:'bus_location', filter: `id=eq.${BUS_ID}`}, p => {
+                const data = p.new;
+                const statusLabel = document.getElementById('bus-status');
+                const trackBtn = document.getElementById('re-track');
+
+                if(data.lat && data.lng) {
+                    busPos = [data.lat, data.lng];
+                    statusLabel.innerText = "● BUS EN RUTA"; statusLabel.style.color = "#22c55e";
+                    trackBtn.style.display = "block";
+                    if(!busMarker) busMarker = L.marker(busPos, {icon: busIcon}).addTo(map); else busMarker.setLatLng(busPos);
+                    if(!hasCentered) { map.flyTo(busPos, 17); hasCentered = true; }
+                } else {
+                    if(busMarker) map.removeLayer(busMarker);
+                    busMarker = null; busPos = null; hasCentered = false;
+                    statusLabel.innerText = "Bus: Desconectado"; statusLabel.style.color = "#9ca3af";
+                    trackBtn.style.display = "none";
+                }
+            }).subscribe();
+
+            loadData();
+            setInterval(loadData, 5000);
+            setInterval(runClock, 1000);
+        };
+
+        async function loadData() {
+            const { data: stops } = await window.db.from('stops').select('*, students(*)').eq('bus_id', BUS_ID).order('id');
+            const root = document.getElementById('itinerary');
+            const alertRoot = document.getElementById('alert-container');
+            stopMarkers.forEach(m => map.removeLayer(m)); stopMarkers = [];
+            let content = "";
+            let anyMissing = false;
+
+            stops?.forEach((s, idx) => {
+                const active = s.status === 'active';
+                const done = s.status === 'completed';
+                if(active && s.end_time) window.endTime = s.end_time;
+                
+                stopMarkers.push(L.circleMarker([s.lat, s.lng], {
+                    color: active ? '#ef4444' : (done ? '#4b5563' : '#f59e0b'),
+                    radius: 10, fillOpacity: 0.8
+                }).addTo(map).bindPopup(s.name));
+
+                const studs = s.students.map(st => {
+                    const status = st.attendance_status || 'pending';
+                    const statusLabels = { 'pending': 'No ha ingresado', 'boarded': 'A bordo', 'not_attending': 'No asistirá' };
+                    return `<div class="student-row">
+                        <span class="${status === 'pending' ? 'name-pending' : ''}">${st.name}</span>
+                        <span class="status-${status}">${statusLabels[status]}</span>
+                    </div>`;
+                }).join('');
+                content += `<div class="card" style="border-left:8px solid ${active?'#ef4444':(done?'#4b5563':'#f59e0b')}; opacity:${done?0.6:1}">
+                    <h3>📍 RUTA ${idx+1}: ${s.name} ${done?'✅':''}</h3>${studs || '<small>Sin alumnos</small>'}</div>`;
+                
+                if(done) {
+                    const missing = s.students.filter(st => (st.attendance_status || 'pending') === 'pending');
+                    if(missing.length > 0) anyMissing = true;
+                }
+            });
+            root.innerHTML = content;
+            alertRoot.innerHTML = anyMissing ? `<div class="alert-box">¡Atención! Hay estudiantes que no abordaron en paradas completadas</div>` : "";
+        }
+
+        function runClock() {
+            if(!window.endTime) return;
+            const diff = Math.floor((new Date(window.endTime).getTime() - Date.now()) / 1000);
+            const box = document.getElementById('timer-box');
+            if(diff > 0) {
+                box.style.display = 'block';
+                const m = Math.floor(diff/60), s = diff%60;
+                document.getElementById('count-ui').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+            } else { box.style.display = 'none'; window.endTime = null; }
+        }
+        function centerBus() { if(busPos) map.flyTo(busPos, 17); }
+    </script>
+</body>
+</html>

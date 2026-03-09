@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin 2 - RutaBinaes</title>
+    <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="card" style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>Admin Transporte 2 🚍</h1>
+            <button onclick="location.href='index.html'" style="width: auto; background: #4b5563;">⬅ Inicio</button>
+        </header>
+        <div id="map"></div>
+        <div id="alert-container"></div>
+        <div class="admin-grid">
+            <div class="card">
+                <h3>📍 Gestión de Paradas (Bus 2)</h3>
+                <input type="text" id="stop-name" placeholder="Nombre de parada">
+                <button onclick="addStop()" style="background:#f59e0b;">Guardar Pin Naranja</button>
+                <button onclick="toggleGPS()" id="btn-gps" style="margin-top:10px; background:#4b5563;">📡 TRANSMITIR GPS EN VIVO</button>
+            </div>
+            <div class="card">
+                <h3>👤 Registrar Estudiante (Bus 2)</h3>
+                <input type="text" id="s-name" placeholder="Nombre completo">
+                <select id="s-stop-target"><option value="">Cargando paradas...</option></select>
+                <button onclick="registerStudent()">Vincular Alumno</button>
+            </div>
+        </div>
+        <div id="stops-container"></div>
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="supabase-config.js"></script>
+    <script>
+        const BUS_ID = 2;
+        let map, tempMarker, isGps = false, watchId = null, markers = [], busMarkerAdmin;
+        const busIcon = L.divIcon({ html: `<div style="font-size:25px; filter: drop-shadow(0 0 5px #fff);">🚍</div>`, className: 'bus-admin' });
+
+        window.onload = () => {
+            map = L.map('map').setView([13.4795, -88.1729], 14);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            map.on('click', e => {
+                if(tempMarker) map.removeLayer(tempMarker);
+                tempMarker = L.circleMarker(e.latlng, {color:'#f59e0b', radius:12, fillOpacity:0.8}).addTo(map);
+            });
+            loadAdmin();
+        };
+
+        async function loadAdmin() {
+            const { data: stops } = await window.db.from('stops').select('*, students(*)').eq('bus_id', BUS_ID).order('id');
+            const container = document.getElementById('stops-container');
+            const select = document.getElementById('s-stop-target');
+            markers.forEach(m => map.removeLayer(m)); markers = [];
+            container.innerHTML = ""; select.innerHTML = '<option value="">Seleccione parada...</option>';
+            
+            stops?.forEach(s => {
+                select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+                markers.push(L.marker([s.lat, s.lng]).addTo(map).bindPopup(s.name));
+                const studentsHtml = s.students.map(st => {
+                    const status = st.attendance_status || 'pending';
+                    const labels = {'pending':'⏳','boarded':'✅','not_attending':'❌'};
+                    return `<div class="student-row">
+                        <span class="${status==='pending'?'name-pending':''}">${st.name} <small class="status-${status}">${labels[status]}</small></span>
+                        <div>
+                            <button class="btn-small" style="background:#22c55e" onclick="updStudent(${st.id},'boarded')">✔</button>
+                            <button class="btn-small" style="background:#f59e0b" onclick="updStudent(${st.id},'not_attending')">✖</button>
+                            <button class="btn-small" style="background:#ef4444" onclick="delStudent(${st.id})">x</button>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                const isDone = s.status === 'completed';
+                container.innerHTML += `
+                    <div class="stop-card" style="opacity:${isDone?0.7:1}">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <strong>${s.name} <small>(${s.status || 'pendiente'})</small></strong>
+                            <div>
+                                ${!isDone ? `<button class="btn-small" style="background:#22c55e" onclick="setTimer(${s.id})">Timer</button>
+                                <button class="btn-small" style="background:#6366f1" onclick="updateStatus(${s.id},'completed')">Fin</button>` : 
+                                `<button class="btn-small" style="background:#f59e0b" onclick="updateStatus(${s.id},'active')">♻ Reiniciar</button>`}
+                                <button class="btn-small" style="background:#b91c1c" onclick="deleteStop(${s.id})">Del</button>
+                            </div>
+                        </div>
+                        <div style="margin-top:10px;">${studentsHtml || '<small>Sin alumnos</small>'}</div>
+                    </div>`;
+            });
+        }
+
+        function toggleGPS() {
+            const btn = document.getElementById('btn-gps');
+            if (!isGps) {
+                isGps = true; btn.innerText = "🔴 TRANSMITIENDO BUS 2..."; btn.style.background = "#ef4444";
+                watchId = navigator.geolocation.watchPosition(async p => {
+                    const pos = [p.coords.latitude, p.coords.longitude];
+                    if(!busMarkerAdmin) busMarkerAdmin = L.marker(pos, {icon: busIcon}).addTo(map); else busMarkerAdmin.setLatLng(pos);
+                    map.panTo(pos);
+                    await window.db.from('bus_location').update({ lat: pos[0], lng: pos[1] }).eq('id', BUS_ID);
+                }, (err) => console.error(err), { enableHighAccuracy: true });
+            } else {
+                isGps = false; navigator.geolocation.clearWatch(watchId);
+                if(busMarkerAdmin) map.removeLayer(busMarkerAdmin); busMarkerAdmin = null;
+                btn.innerText = "📡 TRANSMITIR GPS EN VIVO"; btn.style.background = "#4b5563";
+                window.db.from('bus_location').update({ lat: null, lng: null }).eq('id', BUS_ID);
+            }
+        }
+
+        async function registerStudent() {
+            const name = document.getElementById('s-name').value;
+            const stopId = document.getElementById('s-stop-target').value;
+            if(!name || !stopId) return alert("Faltan datos");
+            await window.db.from('students').insert([{ name, stop_id: stopId, bus_id: BUS_ID, attendance_status: 'pending' }]);
+            document.getElementById('s-name').value = ""; loadAdmin();
+        }
+        async function updStudent(id, status) { await window.db.from('students').update({ attendance_status: status }).eq('id', id); loadAdmin(); }
+        async function addStop() {
+            const name = document.getElementById('stop-name').value;
+            if(!tempMarker || !name) return alert("Clic mapa + nombre");
+            await window.db.from('stops').insert([{ name, lat: tempMarker.getLatLng().lat, lng: tempMarker.getLatLng().lng, bus_id: BUS_ID }]);
+            location.reload();
+        }
+        async function setTimer(id) {
+            const end = new Date(Date.now() + 10 * 60000).toISOString();
+            await window.db.from('stops').update({ status: 'active', end_time: end }).eq('id', id);
+            loadAdmin();
+        }
+        async function updateStatus(id, status) {
+            if(status === 'completed') {
+                const { data: stopData } = await window.db.from('stops').select('name, students(*)').eq('id', id).single();
+                const missing = stopData.students.filter(st => (st.attendance_status || 'pending') === 'pending');
+                if(missing.length > 0) {
+                    document.getElementById('alert-container').innerHTML = `<div class="alert-box">¡Atención! Alumnos no abordaron en ${stopData.name}</div>`;
+                    alert("Alumnos pendientes en esta parada");
+                }
+            }
+            await window.db.from('stops').update({ status, end_time: null }).eq('id', id);
+            loadAdmin();
+        }
+        async function deleteStop(id) { if(confirm("¿Borrar?")) { await window.db.from('stops').delete().eq('id', id); loadAdmin(); } }
+        async function delStudent(id) { await window.db.from('students').delete().eq('id', id); loadAdmin(); }
+    </script>
+</body>
+</html>
